@@ -1,11 +1,11 @@
 {
   "addons": {
-    "sogo-rules-assistant@kjkratz.de": {
+    "sogo-rules-assistant@kjkratz.local": {
       "updates": [
         {
-          "update_hash": "sha256:a5deda3dd8700d7872ef9712fa24c492a28e17ca658b61743557f851fc1cb1c3",
-          "update_link": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.2.xpi",
-          "version": "0.2.2"
+          "update_hash": "sha256:9fd6acd7fbd13363d7e61f272ed2386af43b6b04b6356bfde615a76abb06d436",
+          "update_link": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.3.xpi",
+          "version": "0.2.3"
         }
       ]
     }
