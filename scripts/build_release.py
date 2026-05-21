@@ -30,7 +30,8 @@ def read_manifest() -> dict:
 
 
 def addon_id(manifest: dict) -> str:
-    return manifest["applications"]["gecko"]["id"]
+    gecko = (manifest.get("browser_specific_settings") or manifest.get("applications") or {})["gecko"]
+    return gecko["id"]
 
 
 def build_xpi() -> Path:
