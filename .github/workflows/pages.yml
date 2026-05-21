@@ -31,7 +31,7 @@ jobs:
           git fetch origin gh-pages
           rm -rf /tmp/thunderbird-sogo-rules-pages
           git worktree add /tmp/thunderbird-sogo-rules-pages origin/gh-pages
-          rsync -a --delete --exclude .git public/ /tmp/thunderbird-sogo-rules-pages/
+          rsync -a --checksum --delete --exclude .git public/ /tmp/thunderbird-sogo-rules-pages/
           cd /tmp/thunderbird-sogo-rules-pages
           git add -A
           if git diff --cached --quiet; then
