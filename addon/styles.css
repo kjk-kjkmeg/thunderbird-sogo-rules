@@ -1,0 +1,56 @@
+body {
+  min-width: 420px;
+  font: 14px system-ui, sans-serif;
+  padding: 12px;
+}
+
+body.options-page {
+  max-width: 720px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+label {
+  display: block;
+  margin: 12px 0;
+}
+
+input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+
+button {
+  margin: 8px 0;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  margin: 0;
+  width: auto;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+pre {
+  background: #111;
+  color: #eee;
+  padding: 8px;
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+}

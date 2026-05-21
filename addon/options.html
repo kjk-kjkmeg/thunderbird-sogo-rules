@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="styles.css">
+    <title>SOGo Rules Assistant Einstellungen</title>
+  </head>
+  <body class="options-page">
+    <h1>SOGo Rules Assistant</h1>
+    <p>Diese Einstellungen werden lokal im Thunderbird-Profil gespeichert.</p>
+
+    <form id="settings-form">
+      <label>
+        SOGo Basis-URL
+        <input id="sogoBaseUrl" type="url" placeholder="https://sogo.example.org/SOGo" required>
+      </label>
+
+      <label>
+        Benutzername
+        <input id="sogoUsername" type="text" placeholder="collector@kjkratz.de" autocomplete="username" required>
+      </label>
+
+      <label>
+        Passwort / App-Passwort
+        <input id="sogoPassword" type="password" autocomplete="current-password">
+      </label>
+
+      <label>
+        Standard-Zielordner
+        <input id="defaultFolder" type="text" value="INBOX/">
+      </label>
+
+      <label class="checkbox-row">
+        <input id="dryRunOnly" type="checkbox" checked>
+        Nur Dry-run / Preview erlauben
+      </label>
+
+      <div class="button-row">
+        <button type="submit">Speichern</button>
+        <button id="testConnection" type="button">Verbindung testen</button>
+      </div>
+    </form>
+
+    <pre id="status">Bereit.</pre>
+    <script src="options.js"></script>
+  </body>
+</html>

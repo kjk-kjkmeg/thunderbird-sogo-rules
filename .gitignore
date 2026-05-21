@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local secrets/config
+.env
+*.secret
+secrets/
+*.key
+*.pem
+id_*
+
+# Logs/temp
+*.log
+.tmp/
+tmp/
+
+# Build output is reproducible via scripts/build_release.py
+# Keep dist/ ignored until we intentionally publish release artifacts.
+dist/
