@@ -31,7 +31,7 @@ https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistan
 
 4. Commit source + `public/` release artifacts.
 5. Push to GitHub.
-6. GitHub Pages serves `public/` from `main`.
+6. The `.github/workflows/pages.yml` workflow deploys `public/` to GitHub Pages.
 
 ## Manifest requirement
 
