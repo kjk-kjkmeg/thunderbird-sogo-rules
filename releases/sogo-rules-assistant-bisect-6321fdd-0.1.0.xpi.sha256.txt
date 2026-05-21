@@ -1,0 +1,1 @@
+c83b0de5b3caf6fb25f380545f66c84a64c4d7c35a060ddd332c28b4862a5650  sogo-rules-assistant-bisect-6321fdd-0.1.0.xpi
