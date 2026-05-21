@@ -4,7 +4,7 @@ Thunderbird MailExtension for creating SOGo-visible mail filter rules from the c
 
 ## Status
 
-Version `0.2.2` is a direct-add-on build:
+Version `0.2.3` is a direct-add-on build:
 
 - stores SOGo connection settings in the Thunderbird add-on settings page
 - analyzes the currently selected message
@@ -56,13 +56,13 @@ cp dist/updates.json public/updates.json
 The packaged extension is published at:
 
 ```text
-https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.2.xpi
+https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.3.xpi
 ```
 
 Local build path:
 
 ```text
-/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.2.2.xpi
+/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.2.3.xpi
 ```
 
 Install it in Thunderbird:
