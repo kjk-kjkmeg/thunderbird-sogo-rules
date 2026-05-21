@@ -45,15 +45,15 @@ async function testConnection() {
     return;
   }
 
-  // Placeholder until the direct SOGo client is implemented. We intentionally do
-  // not perform a write here. The next implementation step will replace this
-  // with a read-only SOGo preferences probe.
+  $("status").textContent = "Teste SOGo-Lesezugriff…";
+  const client = new SogoClientApi.SogoClient({ baseUrl, username, password });
+  const result = await client.testConnection();
   $("status").textContent = JSON.stringify({
     ok: true,
-    mode: "settings-only",
-    message: "Einstellungen vorhanden. Direkter SOGo-Lesetest folgt im nächsten Schritt.",
+    message: "SOGo-Lesezugriff erfolgreich.",
+    filterCount: result.filterCount,
     baseUrl,
-    username
+    username,
   }, null, 2);
 }
 

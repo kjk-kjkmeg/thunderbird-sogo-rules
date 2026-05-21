@@ -1,56 +1,69 @@
 # Thunderbird SOGo Rules
 
-MVP for a Thunderbird add-on plus local helper service to create SOGo-visible mail filter rules safely.
+Thunderbird MailExtension for creating SOGo-visible mail filter rules from the currently selected message.
 
 ## Status
 
-Dry-run preview MVP. No live SOGo writes are implemented yet.
+Version `0.2.0` is a direct-add-on build:
+
+- stores SOGo connection settings in the Thunderbird add-on settings page
+- analyzes the currently selected message
+- predicts likely `INBOX/...` target folders from Thunderbird folders and message sender/subject
+- lets the user select criteria: sender, sender domain, recipient, CC, subject
+- builds a SOGo filter preview locally
+- can read/write SOGo filter preferences directly over HTTPS when dry-run-only is disabled
+- stores a local backup of the previous filter list before writing
+- verifies writes with a readback check
+- self-update metadata is hosted via GitHub Pages
 
 ## Safety model
 
-- Thunderbird add-on is thin and stores no mail/SOGo credentials.
-- Local helper owns credentials and write/apply gates in later phases.
-- MVP supports dry-run previews only.
+- Dry-run-only is enabled by default.
 - Rule targets must stay under `INBOX/...`.
-- Archive-copy behavior is generated as a candidate and must be verified on the target SOGo instance before production use.
+- At least one explicit criterion is required.
+- Existing filters are backed up to Thunderbird local extension storage before a write.
+- Writes are followed by a SOGo readback check.
+- Spam/Junk/Trash/Drafts/Archiv processing remains out of scope for automatic rule generation.
 
 ## Run tests
 
 ```bash
 cd /home/morpheus/projects/thunderbird-sogo-rules
+node --check addon/rule-model.js
+node --check addon/folder-predictor.js
+node --check addon/sogo-client.js
+node --check addon/popup.js
+node --check addon/options.js
+node tests/test_rule_model_js.cjs
+node tests/test_folder_predictor_js.cjs
+node tests/test_sogo_client_js.cjs
 python3 -m unittest discover -s tests -v
 ```
 
-## Start the local helper
+## Build release
 
 ```bash
 cd /home/morpheus/projects/thunderbird-sogo-rules
-python3 -m helper.sogo_rules_helper --host 127.0.0.1 --port 8765
+python3 scripts/build_release.py \
+  --base-url https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases
+mkdir -p public/releases
+cp dist/sogo-rules-assistant-*.xpi public/releases/
+cp dist/updates.json public/updates.json
 ```
-
-Health check from another terminal:
-
-```bash
-curl http://127.0.0.1:8765/health
-```
-
-Expected: JSON with `"ok": true` and `"writes_enabled": false`.
-
-Manual preview test:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8765/sogo/preview-rule \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Private Preview - Krohn","field":"from","operator":"contains","value":"torben.krohn","folder":"INBOX/Krohn"}'
-```
-
-Expected: JSON with `dry_run: true`, `wrote: false`, and a `SOGoSieveFilters`-compatible rule object.
 
 ## Install as Thunderbird extension
 
-A packaged `.xpi` extension is built at:
+The packaged extension is published at:
 
-`/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.1.0.xpi`
+```text
+https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.0.xpi
+```
+
+Local build path:
+
+```text
+/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.2.0.xpi
+```
 
 Install it in Thunderbird:
 
@@ -58,51 +71,49 @@ Install it in Thunderbird:
 2. Open Add-ons Manager.
 3. Click the gear icon.
 4. Choose **Install Add-on From File...**.
-5. Select this file:
+5. Select the `.xpi` file.
+6. Open the add-on settings.
+7. Enter SOGo base URL, username, password/app-password, and default target folder.
+8. Keep dry-run-only enabled until the read-only connection test succeeds.
+9. Select a message and open the **SOGo Rules Assistant** toolbar button.
+10. Review predicted folder, criteria, and preview before enabling writes.
 
-   `/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.1.0.xpi`
+## Auto updates
 
-6. Confirm the install prompt.
-7. Keep the helper running on `127.0.0.1:8765`.
-8. Select a message in Thunderbird.
-9. Click the **SOGo Rules Assistant** toolbar button.
-10. Keep or change the target folder, e.g. `INBOX/Krohn`.
-11. Click **Preview rule from selected message**.
+The installed XPI contains:
 
-Package/rebuild command, if files change:
-
-```bash
-cd /home/morpheus/projects/thunderbird-sogo-rules
-python3 - <<'PY'
-from pathlib import Path
-from zipfile import ZipFile, ZIP_DEFLATED
-root = Path('addon')
-out = Path('dist/sogo-rules-assistant-0.1.0.xpi')
-out.parent.mkdir(exist_ok=True)
-files = ['manifest.json', 'background.js', 'popup.html', 'popup.js', 'styles.css']
-with ZipFile(out, 'w', ZIP_DEFLATED) as z:
-    for name in files:
-        z.write(root / name, name)
-print(out)
-PY
+```text
+https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/updates.json
 ```
 
-## Install temporarily in Thunderbird for debugging
+Thunderbird checks that update manifest for newer versions.
+
+## Direct SOGo endpoint
+
+The add-on currently uses this SOGo preferences URL shape:
+
+```text
+<SOGo base URL>/so/<encoded username>/Preferences/active.json
+```
+
+Example:
+
+```text
+https://sogo.example.org/SOGo/so/collector%40example.org/Preferences/active.json
+```
+
+If a target SOGo instance uses a different preferences endpoint or write method, adjust `addon/sogo-client.js` and rerun the tests before releasing.
+
+## Temporary debugging install
 
 1. Open Thunderbird.
 2. Open Add-ons Manager.
 3. Click the gear icon.
 4. Choose **Debug Add-ons** or **Load Temporary Add-on** depending on Thunderbird version.
-5. Select this file:
+5. Select:
 
    `/home/morpheus/projects/thunderbird-sogo-rules/addon/manifest.json`
 
-6. Keep the helper running on `127.0.0.1:8765`.
+## Legacy helper
 
-## Current limitation
-
-The add-on only previews rules. It does not write to SOGo and does not persist credentials.
-
-## Plan
-
-See `docs/plans/2026-05-21-thunderbird-sogo-rules-mvp.md`.
+The old Python helper is still present for dry-run comparison tests but is no longer the primary architecture.

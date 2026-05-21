@@ -54,3 +54,39 @@ pre {
   max-height: 320px;
   overflow: auto;
 }
+
+h2 {
+  font-size: 15px;
+  margin: 14px 0 6px;
+}
+
+.criteria-grid {
+  align-items: center;
+  display: grid;
+  grid-template-columns: 44px 120px 120px 1fr;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.header-row {
+  color: #555;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.criteria-grid input[type="checkbox"] {
+  width: auto;
+}
+
+.criteria-grid select,
+.criteria-grid input[type="text"] {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.suggestion {
+  display: block;
+  margin: 4px 0;
+  text-align: left;
+  width: 100%;
+}

@@ -14,6 +14,9 @@ DIST = ROOT / "dist"
 ADDON_FILES = [
     "manifest.json",
     "background.js",
+    "rule-model.js",
+    "folder-predictor.js",
+    "sogo-client.js",
     "popup.html",
     "popup.js",
     "options.html",
