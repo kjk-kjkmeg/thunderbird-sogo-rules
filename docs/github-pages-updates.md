@@ -35,10 +35,10 @@ https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistan
 
 ## Manifest requirement
 
-Before the first install, add this to `addon/manifest.json` under `applications.gecko`:
+The installable manifest contains this stable update URL under `applications.gecko`:
 
 ```json
 "update_url": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/updates.json"
 ```
 
-Do not install the first production XPI until this URL is final, otherwise Thunderbird will not know where to check for future updates.
+Any XPI installed without this field cannot self-update. Install one fixed XPI manually first; future versions can then update through Thunderbird's add-on updater.

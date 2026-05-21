@@ -1,0 +1,1 @@
+d2a5dcc1c631f7742800ee8e0550071b7a975276d7e6d8393e9a8af8022e8e41  dist/sogo-rules-assistant-0.2.4.xpi

@@ -37,6 +37,31 @@ const client = new SogoClient({
   assert.deepStrictEqual(body.SOGoSieveFilters, [{ name: 'New' }]);
   assert.strictEqual(body.SOGoSieveFiltersFingerprint, 'fingerprint-1');
 
+  const originalFetch = globalThis.fetch;
+  try {
+    const defaultFetchCalls = [];
+    globalThis.fetch = async function (url, options = {}) {
+      assert.strictEqual(this, globalThis);
+      defaultFetchCalls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        text: async () => JSON.stringify({ SOGoSieveFilters: [] }),
+      };
+    };
+    const defaultFetchClient = new SogoClient({
+      baseUrl: 'https://sogo.example.org/SOGo',
+      username: 'private@example.org',
+      password: 'secret',
+    });
+    const defaultFetchResult = await defaultFetchClient.testConnection();
+    assert.deepStrictEqual(defaultFetchResult, { ok: true, filterCount: 0 });
+    assert.strictEqual(defaultFetchCalls.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
   console.log('sogo-client tests passed');
 })().catch(err => {
   console.error(err);

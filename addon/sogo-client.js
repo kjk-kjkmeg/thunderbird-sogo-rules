@@ -1,8 +1,8 @@
 (function (root, factory) {
-  const api = factory();
+  const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.SogoClientApi = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   function base64Encode(value) {
     if (typeof btoa === 'function') return btoa(value);
     return Buffer.from(value, 'utf8').toString('base64');
@@ -16,12 +16,19 @@
     return String(value || '').trim().replace(/\/+$/, '');
   }
 
+  function defaultFetch(...args) {
+    if (!root || typeof root.fetch !== 'function') {
+      throw new Error('fetch API ist in diesem Thunderbird-Kontext nicht verfügbar.');
+    }
+    return root.fetch(...args);
+  }
+
   class SogoClient {
     constructor({ baseUrl, username, password, fetchImpl } = {}) {
       this.baseUrl = normalizeBaseUrl(baseUrl);
       this.username = String(username || '').trim();
       this.password = String(password || '');
-      this.fetchImpl = fetchImpl || fetch;
+      this.fetchImpl = fetchImpl || defaultFetch;
       if (!this.baseUrl) throw new Error('SOGo Basis-URL fehlt.');
       if (!this.username) throw new Error('SOGo Benutzername fehlt.');
     }
