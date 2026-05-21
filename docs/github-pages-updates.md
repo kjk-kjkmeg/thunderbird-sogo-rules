@@ -7,8 +7,8 @@ Chosen target: public GitHub repository + GitHub Pages.
 ## Expected public layout
 
 ```text
-https://<github-owner>.github.io/thunderbird-sogo-rules/updates.json
-https://<github-owner>.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-<version>.xpi
+https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/updates.json
+https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-<version>.xpi
 ```
 
 ## Release flow
@@ -18,7 +18,7 @@ https://<github-owner>.github.io/thunderbird-sogo-rules/releases/sogo-rules-assi
 
    ```bash
    python3 scripts/build_release.py \
-     --base-url https://<github-owner>.github.io/thunderbird-sogo-rules/releases
+     --base-url https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases
    ```
 
 3. Copy release files for GitHub Pages:
@@ -38,7 +38,7 @@ https://<github-owner>.github.io/thunderbird-sogo-rules/releases/sogo-rules-assi
 Before the first install, add this to `addon/manifest.json` under `applications.gecko`:
 
 ```json
-"update_url": "https://<github-owner>.github.io/thunderbird-sogo-rules/updates.json"
+"update_url": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/updates.json"
 ```
 
 Do not install the first production XPI until this URL is final, otherwise Thunderbird will not know where to check for future updates.

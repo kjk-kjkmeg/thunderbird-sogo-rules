@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "SOGo Rules Assistant",
   "version": "0.1.0",
-  "description": "Preview SOGo-visible mail filter rules from selected Thunderbird messages via a local helper.",
+  "description": "Create SOGo-visible mail filter rules from selected Thunderbird messages.",
   "permissions": [
     "messagesRead",
     "accountsRead",
@@ -23,7 +23,8 @@
   "applications": {
     "gecko": {
       "id": "sogo-rules-assistant@kjkratz.local",
-      "strict_min_version": "102.0"
+      "strict_min_version": "102.0",
+      "update_url": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/updates.json"
     }
   }
 }
