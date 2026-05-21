@@ -16,6 +16,17 @@
     return String(value || '').trim().replace(/\/+$/, '');
   }
 
+  function detectProvider(baseUrl) {
+    let host = '';
+    try {
+      host = new URL(normalizeBaseUrl(baseUrl)).hostname.toLowerCase();
+    } catch (err) {
+      return 'sogo';
+    }
+    if (host === 'webmail.all-inkl.com' || host.endsWith('.all-inkl.com')) return 'allinkl';
+    return 'sogo';
+  }
+
   function defaultFetch(...args) {
     if (!root || typeof root.fetch !== 'function') {
       throw new Error('fetch API ist in diesem Thunderbird-Kontext nicht verfügbar.');
@@ -90,5 +101,52 @@
     }
   }
 
-  return { SogoClient, buildBasicAuthHeader, normalizeBaseUrl };
+  class AllInklClient {
+    constructor({ baseUrl, username, password, fetchImpl } = {}) {
+      this.baseUrl = normalizeBaseUrl(baseUrl || 'https://webmail.all-inkl.com');
+      this.username = String(username || '').trim();
+      this.password = String(password || '');
+      this.fetchImpl = fetchImpl || defaultFetch;
+      if (!this.baseUrl) throw new Error('All-Inkl WebMail Basis-URL fehlt.');
+      if (!this.username) throw new Error('All-Inkl Benutzername fehlt.');
+    }
+
+    async testConnection() {
+      const response = await this.fetchImpl(`${this.baseUrl}/`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`All-Inkl WebMail HTTP ${response.status}: ${text.slice(0, 300)}`);
+      }
+      const loginPageDetected = /ALL-INKL|WebMail|webmail/i.test(text);
+      return {
+        ok: true,
+        provider: 'allinkl',
+        status: response.status,
+        loginPageDetected,
+        message: loginPageDetected
+          ? 'All-Inkl WebMail ist erreichbar. Der SOGo-Endpunkt wird nicht verwendet.'
+          : 'Basis-URL erreichbar, aber All-Inkl WebMail wurde nicht eindeutig erkannt.',
+      };
+    }
+
+    async readFilters() {
+      throw new Error('All-Inkl WebMail Filter-Lesen ist in diesem Add-on noch nicht implementiert.');
+    }
+
+    async writeFilters() {
+      throw new Error('All-Inkl WebMail Filter-Schreiben ist in diesem Add-on noch nicht implementiert.');
+    }
+  }
+
+  function createClient({ provider, baseUrl, username, password, fetchImpl } = {}) {
+    const resolvedProvider = provider || detectProvider(baseUrl);
+    if (resolvedProvider === 'allinkl') return new AllInklClient({ baseUrl, username, password, fetchImpl });
+    return new SogoClient({ baseUrl, username, password, fetchImpl });
+  }
+
+  return { SogoClient, AllInklClient, createClient, detectProvider, buildBasicAuthHeader, normalizeBaseUrl };
 });

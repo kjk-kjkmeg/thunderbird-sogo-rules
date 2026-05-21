@@ -1,7 +1,9 @@
 const assert = require('assert');
-const { SogoClient, buildBasicAuthHeader } = require('../addon/sogo-client.js');
+const { SogoClient, AllInklClient, createClient, detectProvider, buildBasicAuthHeader } = require('../addon/sogo-client.js');
 
 assert.strictEqual(buildBasicAuthHeader('user', 'pass'), 'Basic dXNlcjpwYXNz');
+assert.strictEqual(detectProvider('https://webmail.all-inkl.com'), 'allinkl');
+assert.strictEqual(detectProvider('https://sogo.example.org/SOGo'), 'sogo');
 
 const calls = [];
 const fakeFetch = async (url, options = {}) => {
@@ -61,6 +63,29 @@ const client = new SogoClient({
   } finally {
     globalThis.fetch = originalFetch;
   }
+
+  const allInklCalls = [];
+  const allInklClient = createClient({
+    baseUrl: 'https://webmail.all-inkl.com',
+    username: 'm0526a94',
+    password: 'secret',
+    fetchImpl: async (url, options = {}) => {
+      allInklCalls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'text/html' },
+        text: async () => '<!doctype html><title>ALL-INKL WebMail</title>',
+      };
+    },
+  });
+  assert(allInklClient instanceof AllInklClient);
+  const allInklResult = await allInklClient.testConnection();
+  assert.strictEqual(allInklResult.provider, 'allinkl');
+  assert.strictEqual(allInklResult.loginPageDetected, true);
+  assert.strictEqual(allInklCalls[0].url, 'https://webmail.all-inkl.com/');
+  assert.strictEqual(allInklCalls[0].options.credentials, 'include');
+  await assert.rejects(() => allInklClient.readFilters(), /noch nicht implementiert/);
 
   console.log('sogo-client tests passed');
 })().catch(err => {

@@ -40,18 +40,27 @@ async function testConnection() {
   const baseUrl = normalizeBaseUrl($("sogoBaseUrl").value);
   const username = $("sogoUsername").value.trim();
   const password = $("sogoPassword").value;
-  if (!baseUrl || !username || !password) {
-    $("status").textContent = "Bitte SOGo URL, Benutzername und Passwort eintragen.";
+  if (!baseUrl || !username) {
+    $("status").textContent = "Bitte Basis-URL und Benutzername eintragen.";
     return;
   }
 
-  $("status").textContent = "Teste SOGo-Lesezugriff…";
-  const client = new SogoClientApi.SogoClient({ baseUrl, username, password });
+  const provider = SogoClientApi.detectProvider(baseUrl);
+  if (provider === "sogo" && !password) {
+    $("status").textContent = "Bitte für SOGo URL, Benutzername und Passwort eintragen.";
+    return;
+  }
+
+  $("status").textContent = provider === "allinkl" ? "Teste All-Inkl WebMail-Erreichbarkeit…" : "Teste SOGo-Lesezugriff…";
+  const client = SogoClientApi.createClient({ provider, baseUrl, username, password });
   const result = await client.testConnection();
   $("status").textContent = JSON.stringify({
     ok: true,
-    message: "SOGo-Lesezugriff erfolgreich.",
-    filterCount: result.filterCount,
+    provider,
+    message: result.message || (provider === "allinkl" ? "All-Inkl WebMail erreichbar." : "SOGo-Lesezugriff erfolgreich."),
+    filterCount: typeof result.filterCount === "number" ? result.filterCount : undefined,
+    httpStatus: result.status,
+    loginPageDetected: result.loginPageDetected,
     baseUrl,
     username,
   }, null, 2);

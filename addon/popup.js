@@ -157,7 +157,9 @@ function buildPreview() {
 }
 
 function clientFromSettings(settings) {
-  return new SogoClientApi.SogoClient({
+  const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
+  return SogoClientApi.createClient({
+    provider,
     baseUrl: settings.sogoBaseUrl,
     username: settings.sogoUsername,
     password: settings.sogoPassword,
@@ -166,6 +168,8 @@ function clientFromSettings(settings) {
 
 async function applyRule() {
   const settings = await getSettings();
+  const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
+  if (provider === 'allinkl') throw new Error('All-Inkl WebMail Filter-Schreiben ist noch nicht implementiert. Preview bleibt sicher lokal.');
   if (settings.dryRunOnly) throw new Error('Dry-run-only ist aktiv. Bitte in den Add-on-Einstellungen deaktivieren.');
   const rule = latestPreview || buildPreview();
   const client = clientFromSettings(settings);
@@ -181,9 +185,12 @@ async function applyRule() {
 
 async function initialize() {
   const settings = await getSettings();
+  const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
   $('folder').value = settings.defaultFolder || 'INBOX/';
-  $('mode').textContent = settings.dryRunOnly ? 'Dry-run aktiv. Schreiben ist gesperrt.' : 'Schreiben nach SOGo ist nach Preview möglich.';
-  $('apply').disabled = settings.dryRunOnly;
+  $('mode').textContent = provider === 'allinkl'
+    ? 'All-Inkl-Modus: Preview aktiv. Schreiben von WebMail-Filtern ist noch gesperrt.'
+    : (settings.dryRunOnly ? 'Dry-run aktiv. Schreiben ist gesperrt.' : 'Schreiben nach SOGo ist nach Preview möglich.');
+  $('apply').disabled = settings.dryRunOnly || provider === 'allinkl';
   await analyzeSelectedMail();
 }
 
