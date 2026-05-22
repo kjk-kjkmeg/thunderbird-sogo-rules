@@ -65,12 +65,40 @@ const client = new SogoClient({
   }
 
   const allInklCalls = [];
+  let allInklFilters = [];
   const allInklClient = createClient({
     baseUrl: 'https://webmail.all-inkl.com',
     username: 'm0526a94',
     password: 'secret',
     fetchImpl: async (url, options = {}) => {
       allInklCalls.push({ url, options });
+      if (options.method === 'POST' && url.endsWith('/')) {
+        assert(String(options.body).includes('login_name=m0526a94'));
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => 'text/html' },
+          text: async () => 'INDEX_GLOBAL_WID = "wid-1";var INDEX_GLOBAL_RT = "rt-1"',
+        };
+      }
+      if (url.endsWith('/ajax.php')) {
+        const body = new URLSearchParams(options.body);
+        const action = body.get('a');
+        assert.strictEqual(body.get('WID'), 'wid-1');
+        assert.strictEqual(body.get('RT'), 'rt-1');
+        if (action === 'data-pref-spamfilter-overview') {
+          return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ filter: allInklFilters }) };
+        }
+        if (action === 'exec-pref-userfilter-save') {
+          assert.strictEqual(body.get('postData[pref-spam-userfilter-name]'), 'Rule 1');
+          assert.strictEqual(body.get('postData[pref-spam-userfilter-cond][target][0]'), 'from');
+          assert.strictEqual(body.get('postData[pref-spam-userfilter-cond][condition][0]'), 'contains');
+          assert.strictEqual(body.get('postData[pref-spam-userfilter-action][action][0]'), 'move');
+          assert.strictEqual(body.get('postData[pref-spam-userfilter-action][target][0]'), 'SU5CT1gvTcO8bGxlcg==');
+          allInklFilters = [{ id: '42', title: 'Rule 1', active: true }];
+          return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ result: true }) };
+        }
+      }
       return {
         ok: true,
         status: 200,
@@ -82,10 +110,17 @@ const client = new SogoClient({
   assert(allInklClient instanceof AllInklClient);
   const allInklResult = await allInklClient.testConnection();
   assert.strictEqual(allInklResult.provider, 'allinkl');
-  assert.strictEqual(allInklResult.loginPageDetected, true);
+  assert.strictEqual(allInklResult.loggedIn, true);
   assert.strictEqual(allInklCalls[0].url, 'https://webmail.all-inkl.com/');
   assert.strictEqual(allInklCalls[0].options.credentials, 'include');
-  await assert.rejects(() => allInklClient.readFilters(), /noch nicht implementiert/);
+  const writeResult = await allInklClient.writeRule({
+    name: 'Rule 1',
+    match: 'all',
+    conditions: [{ field: 'from', operator: 'contains', value: 'person@example.org' }],
+    actions: [{ method: 'fileinto', argument: 'INBOX/Müller' }],
+  });
+  assert.strictEqual(writeResult.ok, true);
+  assert.strictEqual(writeResult.newCount, 1);
 
   console.log('sogo-client tests passed');
 })().catch(err => {

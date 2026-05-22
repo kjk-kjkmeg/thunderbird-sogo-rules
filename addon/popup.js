@@ -312,7 +312,6 @@ async function applyRuleToInbox(rule) {
 async function applyRule() {
   const settings = await getSettings();
   const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
-  if (provider === 'allinkl') throw new Error('All-Inkl WebMail Filter-Schreiben ist noch nicht implementiert. Preview bleibt sicher lokal.');
   if (settings.dryRunOnly) throw new Error('Dry-run-only ist aktiv. Bitte in den Add-on-Einstellungen deaktivieren.');
   const rule = latestPreview || buildPreview();
   const target = rule.actions.find(action => action.method === 'fileinto');
@@ -322,20 +321,34 @@ async function applyRule() {
     folderEnsure = await ensureTargetFolder(selectedMessageCache.accountId, targetPath);
   }
   const client = clientFromSettings(settings);
-  const existing = await client.readFilters();
-  const updated = SogoRuleModel.mergeRuleIntoExistingFilters(existing, rule);
-  await browser.storage.local.set({ lastSogoSieveFiltersBackup: { at: new Date().toISOString(), filters: existing } });
-  await client.writeFilters(updated);
-  const readback = await client.readFilters();
-  const found = readback.some(item => item && item.name === rule.name);
-  if (!found) throw new Error('SOGo-Readback konnte die geschriebene Regel nicht finden.');
+  let writeResult;
+  let previousCount;
+  let newCount;
+  if (provider === 'allinkl' && typeof client.writeRule === 'function') {
+    writeResult = await client.writeRule(rule);
+    previousCount = writeResult.previousCount;
+    newCount = writeResult.newCount;
+  } else {
+    const existing = await client.readFilters();
+    const updated = SogoRuleModel.mergeRuleIntoExistingFilters(existing, rule);
+    await browser.storage.local.set({ lastSogoSieveFiltersBackup: { at: new Date().toISOString(), filters: existing } });
+    await client.writeFilters(updated);
+    const readback = await client.readFilters();
+    const found = readback.some(item => item && item.name === rule.name);
+    if (!found) throw new Error('SOGo-Readback konnte die geschriebene Regel nicht finden.');
+    previousCount = existing.length;
+    newCount = readback.length;
+    writeResult = { ok: true };
+  }
   let inboxApply = null;
   if ($('applyToInbox').checked) inboxApply = await applyRuleToInbox(rule);
   $('output').textContent = JSON.stringify({
     wrote: true,
     ruleName: rule.name,
-    previousCount: existing.length,
-    newCount: readback.length,
+    previousCount,
+    newCount,
+    provider,
+    writeResult,
     targetFolder: targetPath,
     foldersCreated: folderEnsure ? folderEnsure.created : [],
     appliedToInbox: Boolean(inboxApply),
@@ -348,9 +361,9 @@ async function initialize() {
   const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
   $('folder').value = settings.defaultFolder || 'INBOX/';
   $('mode').textContent = provider === 'allinkl'
-    ? 'All-Inkl-Modus: Preview aktiv. Schreiben von WebMail-Filtern ist noch gesperrt.'
+    ? (settings.dryRunOnly ? 'All-Inkl-Modus: Dry-run aktiv. Schreiben ist gesperrt.' : 'All-Inkl-Modus: Schreiben nach WebMail ist aktiv; optional kann die neue Regel auf die INBOX angewendet werden.')
     : (settings.dryRunOnly ? 'Dry-run aktiv. Schreiben ist gesperrt.' : 'Schreiben nach SOGo ist nach Preview möglich.');
-  $('apply').disabled = settings.dryRunOnly || provider === 'allinkl';
+  $('apply').disabled = settings.dryRunOnly;
   await analyzeSelectedMail();
 }
 

@@ -8,6 +8,20 @@
     return Buffer.from(value, 'utf8').toString('base64');
   }
 
+  function base64EncodeUtf8(value) {
+    const text = String(value || '');
+    if (typeof TextEncoder === 'function' && typeof btoa === 'function') {
+      let binary = '';
+      for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+      return btoa(binary);
+    }
+    return Buffer.from(text, 'utf8').toString('base64');
+  }
+
+  function escapeRegex(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   function buildBasicAuthHeader(username, password) {
     return `Basic ${base64Encode(`${username}:${password}`)}`;
   }
@@ -107,38 +121,166 @@
       this.username = String(username || '').trim();
       this.password = String(password || '');
       this.fetchImpl = fetchImpl || defaultFetch;
+      this.wid = null;
+      this.rt = null;
       if (!this.baseUrl) throw new Error('All-Inkl WebMail Basis-URL fehlt.');
       if (!this.username) throw new Error('All-Inkl Benutzername fehlt.');
     }
 
-    async testConnection() {
-      const response = await this.fetchImpl(`${this.baseUrl}/`, {
+    async login() {
+      await this.fetchImpl(`${this.baseUrl}/`, {
         method: 'GET',
         credentials: 'include',
         headers: { Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
       });
+      const body = new URLSearchParams();
+      body.set('login_target', 'desktop');
+      body.set('language', 'de_DE');
+      body.set('login_name', this.username);
+      body.set('login_password', this.password);
+      const response = await this.fetchImpl(`${this.baseUrl}/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        },
+        body: body.toString(),
+      });
       const text = await response.text();
-      if (!response.ok) {
-        throw new Error(`All-Inkl WebMail HTTP ${response.status}: ${text.slice(0, 300)}`);
+      if (!response.ok) throw new Error(`All-Inkl WebMail Login HTTP ${response.status}: ${text.slice(0, 300)}`);
+      const match = text.match(/INDEX_GLOBAL_WID\s*=\s*"([^"]+)";var\s+INDEX_GLOBAL_RT\s*=\s*"([^"]+)"/);
+      if (!match) throw new Error('All-Inkl WebMail Login fehlgeschlagen: WID/RT nicht gefunden.');
+      this.wid = match[1];
+      this.rt = match[2];
+      return { ok: true, provider: 'allinkl' };
+    }
+
+    async ensureLoggedIn() {
+      if (this.wid && this.rt) return;
+      await this.login();
+    }
+
+    async ajax(action, extra = []) {
+      await this.ensureLoggedIn();
+      const body = new URLSearchParams();
+      body.append('a', action);
+      body.append('WID', this.wid);
+      body.append('RT', this.rt);
+      const pairs = Array.isArray(extra) ? extra : Object.entries(extra);
+      for (const [key, value] of pairs) body.append(key, value == null ? '' : String(value));
+      const response = await this.fetchImpl(`${this.baseUrl}/ajax.php`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: body.toString(),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(`All-Inkl WebMail AJAX ${action} HTTP ${response.status}: ${text.slice(0, 300)}`);
+      try {
+        return JSON.parse(text);
+      } catch (err) {
+        throw new Error(`All-Inkl WebMail AJAX ${action} lieferte kein JSON: ${err.message}`);
       }
-      const loginPageDetected = /ALL-INKL|WebMail|webmail/i.test(text);
+    }
+
+    async testConnection() {
+      await this.login();
       return {
         ok: true,
         provider: 'allinkl',
-        status: response.status,
-        loginPageDetected,
-        message: loginPageDetected
-          ? 'All-Inkl WebMail ist erreichbar. Der SOGo-Endpunkt wird nicht verwendet.'
-          : 'Basis-URL erreichbar, aber All-Inkl WebMail wurde nicht eindeutig erkannt.',
+        loginPageDetected: true,
+        loggedIn: true,
+        message: 'All-Inkl WebMail Login erfolgreich. Der SOGo-Endpunkt wird nicht verwendet.',
       };
     }
 
     async readFilters() {
-      throw new Error('All-Inkl WebMail Filter-Lesen ist in diesem Add-on noch nicht implementiert.');
+      const overview = await this.ajax('data-pref-spamfilter-overview');
+      const filters = Array.isArray(overview && overview.filter) ? overview.filter : [];
+      return filters.map(item => ({
+        id: item.id,
+        name: item.title || item.name || '',
+        title: item.title || item.name || '',
+        active: item.active,
+        type: item.type,
+        raw: item,
+      }));
     }
 
-    async writeFilters() {
-      throw new Error('All-Inkl WebMail Filter-Schreiben ist in diesem Add-on noch nicht implementiert.');
+    conditionToAllInkl(condition) {
+      const fieldMap = {
+        from: 'from',
+        fromDomain: 'from',
+        to: 'to',
+        cc: 'cc',
+        subject: 'subject',
+      };
+      const opMap = {
+        contains: 'contains',
+        is: 'equals',
+        beginsWith: 'regex',
+        endsWith: 'regex',
+      };
+      let value = String(condition.value || '');
+      if (condition.field === 'fromDomain' && !value.startsWith('@')) value = `@${value}`;
+      if (condition.operator === 'beginsWith') value = `^${escapeRegex(value)}`;
+      if (condition.operator === 'endsWith') value = `${escapeRegex(value)}$`;
+      return {
+        target: fieldMap[condition.field] || 'other_header',
+        condition: opMap[condition.operator] || 'contains',
+        value,
+      };
+    }
+
+    ruleToPostData(rule) {
+      const move = (rule.actions || []).find(action => action && action.method === 'fileinto');
+      if (!move || !move.argument) throw new Error('All-Inkl Regel ohne Zielordner kann nicht gespeichert werden.');
+      const pairs = [];
+      pairs.push(['postData[pref-spam-userfilter-name]', rule.name]);
+      pairs.push(['postData[pref-spam-userfilter-zuerstanwenden]', '1']);
+      if ((rule.match || 'all') === 'all') pairs.push(['postData[andlink]', '1']);
+      (rule.conditions || []).forEach((condition, index) => {
+        const c = this.conditionToAllInkl(condition);
+        pairs.push([`postData[pref-spam-userfilter-cond][target][${index}]`, c.target]);
+        pairs.push([`postData[pref-spam-userfilter-cond][condition][${index}]`, c.condition]);
+        pairs.push([`postData[pref-spam-userfilter-cond][value][${index}]`, c.value]);
+      });
+      pairs.push(['postData[pref-spam-userfilter-action][action][0]', 'move']);
+      pairs.push(['postData[pref-spam-userfilter-action][target][0]', base64EncodeUtf8(move.argument)]);
+      return pairs;
+    }
+
+    async deleteFiltersByName(name) {
+      const filters = await this.readFilters();
+      const ids = filters.filter(item => item.name === name && item.id != null).map(item => item.id);
+      if (!ids.length) return { deleted: 0, response: null };
+      const pairs = ids.map(id => ['postData[pref-spam-filter][]', id]);
+      const response = await this.ajax('exec-pref-spam-delete', pairs);
+      if (!response || !response.result) throw new Error(`All-Inkl konnte vorhandene gleichnamige Regel nicht löschen: ${JSON.stringify(response).slice(0, 300)}`);
+      return { deleted: ids.length, response };
+    }
+
+    async writeRule(rule) {
+      await this.ensureLoggedIn();
+      const before = await this.readFilters();
+      const deleted = await this.deleteFiltersByName(rule.name);
+      const response = await this.ajax('exec-pref-userfilter-save', this.ruleToPostData(rule));
+      if (!response || !response.result) throw new Error(`All-Inkl konnte Regel nicht speichern: ${JSON.stringify(response).slice(0, 300)}`);
+      const after = await this.readFilters();
+      const found = after.find(item => item.name === rule.name);
+      if (!found) throw new Error('All-Inkl-Readback konnte die geschriebene Regel nicht finden.');
+      return { ok: true, ruleName: rule.name, previousCount: before.length, newCount: after.length, deleted: deleted.deleted, response, found };
+    }
+
+    async writeFilters(filters) {
+      const last = Array.isArray(filters) ? filters[filters.length - 1] : null;
+      if (!last) throw new Error('All-Inkl Filter-Schreiben ohne Regel aufgerufen.');
+      return await this.writeRule(last);
     }
   }
 
@@ -148,5 +290,5 @@
     return new SogoClient({ baseUrl, username, password, fetchImpl });
   }
 
-  return { SogoClient, AllInklClient, createClient, detectProvider, buildBasicAuthHeader, normalizeBaseUrl };
+  return { SogoClient, AllInklClient, createClient, detectProvider, buildBasicAuthHeader, normalizeBaseUrl, base64EncodeUtf8 };
 });
