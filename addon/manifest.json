@@ -1,11 +1,13 @@
 {
   "manifest_version": 2,
   "name": "SOGo Rules Assistant",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Create SOGo-visible mail filter rules from selected Thunderbird messages.",
   "permissions": [
     "messagesRead",
+    "messagesMove",
     "accountsRead",
+    "accountsFolders",
     "storage",
     "https://*/*",
     "http://*/*"

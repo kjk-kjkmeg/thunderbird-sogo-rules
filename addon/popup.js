@@ -35,6 +35,9 @@ function headerValue(headers, name) {
 function messageSummary(selected) {
   const headers = selected.full.headers || {};
   return {
+    id: selected.msg.id,
+    folder: selected.msg.folder || null,
+    accountId: selected.msg.folder && selected.msg.folder.accountId,
     from: headerValue(headers, 'from') || selected.msg.author || '',
     to: headerValue(headers, 'to') || (selected.msg.recipients || []).join(', '),
     cc: headerValue(headers, 'cc') || '',
@@ -42,6 +45,49 @@ function messageSummary(selected) {
     author: selected.msg.author || '',
     recipients: (selected.msg.recipients || []).join(', '),
   };
+}
+
+function folderPath(folder) {
+  return String((folder && (folder.path || folder.name)) || '').replace(/^\/+/, '');
+}
+
+function sameFolderPath(folder, path) {
+  return folderPath(folder).toLowerCase() === String(path || '').replace(/^\/+/, '').toLowerCase();
+}
+
+function flattenFolderObjects(folder) {
+  if (!folder) return [];
+  const rows = [folder];
+  for (const child of folder.subFolders || folder.folders || []) rows.push(...flattenFolderObjects(child));
+  return rows;
+}
+
+async function listAccounts() {
+  if (!browser.accounts || !browser.accounts.list) return [];
+  return await browser.accounts.list();
+}
+
+function findAccountById(accounts, accountId) {
+  return (accounts || []).find(account => String(account.id) === String(accountId));
+}
+
+function findFolderInAccount(account, path) {
+  for (const root of account && account.folders || []) {
+    const found = flattenFolderObjects(root).find(folder => sameFolderPath(folder, path));
+    if (found) return found;
+  }
+  return null;
+}
+
+function findInboxFolder(account) {
+  for (const root of account && account.folders || []) {
+    const found = flattenFolderObjects(root).find(folder => {
+      const type = String(folder.type || '').toLowerCase();
+      return type === 'inbox' || sameFolderPath(folder, 'INBOX');
+    });
+    if (found) return found;
+  }
+  return null;
 }
 
 function flattenFolders(folder, prefix = '') {
@@ -54,8 +100,7 @@ function flattenFolders(folder, prefix = '') {
 }
 
 async function listMailFolders() {
-  if (!browser.accounts || !browser.accounts.list) return [];
-  const accounts = await browser.accounts.list();
+  const accounts = await listAccounts();
   const folders = [];
   for (const account of accounts || []) {
     for (const folder of account.folders || []) folders.push(...flattenFolders(folder));
@@ -166,12 +211,116 @@ function clientFromSettings(settings) {
   });
 }
 
+function messageHeaderValue(message, field) {
+  if (field === 'from') return message.author || '';
+  if (field === 'fromDomain') return SogoRuleModel.extractEmailAddress(message.author || '').split('@').pop() || '';
+  if (field === 'to') return (message.recipients || []).join(', ');
+  if (field === 'cc') return (message.ccList || message.cc || []).join ? (message.ccList || message.cc || []).join(', ') : String(message.ccList || message.cc || '');
+  if (field === 'subject') return message.subject || '';
+  return '';
+}
+
+function criterionMatchesMessage(message, criterion) {
+  const actual = String(messageHeaderValue(message, criterion.field)).casefold ? String(messageHeaderValue(message, criterion.field)).casefold() : String(messageHeaderValue(message, criterion.field)).toLowerCase();
+  const expected = String(criterion.value || '').toLowerCase();
+  if (criterion.operator === 'contains') return actual.includes(expected);
+  if (criterion.operator === 'is') return actual === expected;
+  if (criterion.operator === 'beginsWith') return actual.startsWith(expected);
+  if (criterion.operator === 'endsWith') return actual.endsWith(expected);
+  return false;
+}
+
+function ruleMatchesMessage(message, rule) {
+  const results = (rule.conditions || []).map(criterion => criterionMatchesMessage(message, criterion));
+  return rule.match === 'all' ? results.every(Boolean) : results.some(Boolean);
+}
+
+async function queryAllMessages(folder) {
+  if (!browser.messages || !browser.messages.query) throw new Error('Thunderbird messages.query API ist nicht verfügbar.');
+  const result = [];
+  let page = await browser.messages.query({ folder });
+  result.push(...(page.messages || []));
+  while (page.id && browser.messages.continueList) {
+    page = await browser.messages.continueList(page.id);
+    result.push(...(page.messages || []));
+  }
+  return result;
+}
+
+async function ensureTargetFolder(accountId, targetPath) {
+  if (!browser.folders || !browser.folders.create) {
+    throw new Error('Thunderbird folders.create API ist nicht verfügbar — Zielordner kann nicht automatisch angelegt werden.');
+  }
+  let accounts = await listAccounts();
+  let account = findAccountById(accounts, accountId);
+  if (!account) throw new Error(`Thunderbird-Konto nicht gefunden: ${accountId}`);
+  let existing = findFolderInAccount(account, targetPath);
+  if (existing) return { folder: existing, created: [] };
+
+  const inbox = findInboxFolder(account);
+  if (!inbox) throw new Error('INBOX des aktuellen Kontos wurde nicht gefunden.');
+  const parts = SogoRuleModel.validateTargetFolder(targetPath).split('/').slice(1);
+  let parent = inbox;
+  const created = [];
+  for (const part of parts) {
+    const partialPath = `${folderPath(parent)}/${part}`.replace(/^\/+/, '');
+    existing = findFolderInAccount(account, partialPath);
+    if (existing) {
+      parent = existing;
+      continue;
+    }
+    const made = await browser.folders.create(parent, part);
+    created.push(partialPath);
+    accounts = await listAccounts();
+    account = findAccountById(accounts, accountId);
+    parent = (made && made.path) ? made : findFolderInAccount(account, partialPath);
+    if (!parent) throw new Error(`Ordner wurde angelegt, konnte aber nicht wiedergefunden werden: ${partialPath}`);
+  }
+  return { folder: parent, created };
+}
+
+async function applyRuleToInbox(rule) {
+  if (!selectedMessageCache || !selectedMessageCache.accountId) {
+    throw new Error('Kein aktuelles Thunderbird-Konto aus der ausgewählten Mail ermittelbar.');
+  }
+  if (!browser.messages || !browser.messages.move) throw new Error('Thunderbird messages.move API ist nicht verfügbar.');
+  const target = rule.actions.find(action => action.method === 'fileinto');
+  const targetPath = target && target.argument;
+  if (!targetPath || targetPath === 'INBOX') throw new Error('Kein gültiger Zielordner für Inbox-Anwendung.');
+
+  const accounts = await listAccounts();
+  const account = findAccountById(accounts, selectedMessageCache.accountId);
+  if (!account) throw new Error(`Thunderbird-Konto nicht gefunden: ${selectedMessageCache.accountId}`);
+  const inbox = findInboxFolder(account);
+  if (!inbox) throw new Error('INBOX des aktuellen Kontos wurde nicht gefunden.');
+  const { folder: targetFolder, created } = await ensureTargetFolder(selectedMessageCache.accountId, targetPath);
+  const messages = await queryAllMessages(inbox);
+  const matches = messages.filter(message => ruleMatchesMessage(message, rule) && !sameFolderPath(message.folder, targetPath));
+  if (matches.length) {
+    for (let i = 0; i < matches.length; i += 100) {
+      await browser.messages.move(matches.slice(i, i + 100).map(message => message.id), targetFolder);
+    }
+  }
+  return {
+    inboxChecked: messages.length,
+    moved: matches.length,
+    targetFolder: targetPath,
+    foldersCreated: created,
+  };
+}
+
 async function applyRule() {
   const settings = await getSettings();
   const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
   if (provider === 'allinkl') throw new Error('All-Inkl WebMail Filter-Schreiben ist noch nicht implementiert. Preview bleibt sicher lokal.');
   if (settings.dryRunOnly) throw new Error('Dry-run-only ist aktiv. Bitte in den Add-on-Einstellungen deaktivieren.');
   const rule = latestPreview || buildPreview();
+  const target = rule.actions.find(action => action.method === 'fileinto');
+  const targetPath = target && target.argument;
+  let folderEnsure = null;
+  if (targetPath && targetPath !== 'INBOX' && selectedMessageCache && selectedMessageCache.accountId) {
+    folderEnsure = await ensureTargetFolder(selectedMessageCache.accountId, targetPath);
+  }
   const client = clientFromSettings(settings);
   const existing = await client.readFilters();
   const updated = SogoRuleModel.mergeRuleIntoExistingFilters(existing, rule);
@@ -180,7 +329,18 @@ async function applyRule() {
   const readback = await client.readFilters();
   const found = readback.some(item => item && item.name === rule.name);
   if (!found) throw new Error('SOGo-Readback konnte die geschriebene Regel nicht finden.');
-  $('output').textContent = JSON.stringify({ wrote: true, ruleName: rule.name, previousCount: existing.length, newCount: readback.length }, null, 2);
+  let inboxApply = null;
+  if ($('applyToInbox').checked) inboxApply = await applyRuleToInbox(rule);
+  $('output').textContent = JSON.stringify({
+    wrote: true,
+    ruleName: rule.name,
+    previousCount: existing.length,
+    newCount: readback.length,
+    targetFolder: targetPath,
+    foldersCreated: folderEnsure ? folderEnsure.created : [],
+    appliedToInbox: Boolean(inboxApply),
+    inboxApply,
+  }, null, 2);
 }
 
 async function initialize() {

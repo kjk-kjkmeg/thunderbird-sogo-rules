@@ -40,6 +40,12 @@ button {
   width: auto;
 }
 
+.hint {
+  color: #555;
+  font-size: 12px;
+  margin: -6px 0 10px;
+}
+
 .button-row {
   display: flex;
   gap: 8px;

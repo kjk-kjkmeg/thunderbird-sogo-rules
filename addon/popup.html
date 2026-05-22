@@ -32,6 +32,14 @@
       <input id="ruleName" value="Thunderbird SOGo Rule">
     </label>
 
+    <label class="checkbox-row">
+      <input id="applyToInbox" type="checkbox">
+      Neue Regel nach dem Speichern auch sofort auf die aktuelle INBOX anwenden
+    </label>
+    <p class="hint">
+      Wenn aktiv, wird zuerst der Zielordner angelegt, dann die Regel gespeichert und anschließend werden nur passende vorhandene INBOX-Mails verschoben.
+    </p>
+
     <div class="button-row">
       <button id="analyze" type="button">Mail analysieren</button>
       <button id="preview" type="button">Preview bauen</button>
