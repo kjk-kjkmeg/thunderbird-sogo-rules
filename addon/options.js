@@ -10,6 +10,13 @@ function $(id) {
   return document.getElementById(id);
 }
 
+function renderVersion() {
+  const target = $("addonVersion");
+  if (!target || !browser.runtime || !browser.runtime.getManifest) return;
+  const manifest = browser.runtime.getManifest();
+  target.textContent = manifest && manifest.version ? `v${manifest.version}` : "";
+}
+
 function normalizeBaseUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
 }
@@ -78,6 +85,8 @@ $("testConnection").addEventListener("click", () => {
     $("status").textContent = String(err);
   });
 });
+
+renderVersion();
 
 loadSettings().catch(err => {
   $("status").textContent = String(err);
