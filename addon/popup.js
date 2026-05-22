@@ -1,18 +1,34 @@
 let selectedMessageCache = null;
 let latestPreview = null;
 
-const SETTINGS_KEYS = ['sogoBaseUrl', 'sogoUsername', 'sogoPassword', 'defaultFolder', 'dryRunOnly'];
+const SETTINGS_KEYS = ['accountProfiles', 'sogoBaseUrl', 'sogoUsername', 'sogoPassword', 'defaultFolder', 'dryRunOnly'];
 
 function $(id) { return document.getElementById(id); }
 
-async function getSettings() {
+async function getSettings(accountId) {
   const settings = await browser.storage.local.get(SETTINGS_KEYS);
+  const profiles = settings.accountProfiles || {};
+  const profile = accountId ? profiles[accountId] : null;
+  if (accountId && !profile) {
+    return {
+      sogoBaseUrl: '',
+      sogoUsername: '',
+      sogoPassword: '',
+      defaultFolder: settings.defaultFolder || 'INBOX/',
+      dryRunOnly: settings.dryRunOnly !== false,
+      accountId,
+      accountProfileConfigured: false,
+    };
+  }
+  const source = profile || {};
   return {
-    sogoBaseUrl: settings.sogoBaseUrl || '',
-    sogoUsername: settings.sogoUsername || '',
-    sogoPassword: settings.sogoPassword || '',
+    sogoBaseUrl: source.sogoBaseUrl || '',
+    sogoUsername: source.sogoUsername || '',
+    sogoPassword: source.sogoPassword || '',
     defaultFolder: settings.defaultFolder || 'INBOX/',
     dryRunOnly: settings.dryRunOnly !== false,
+    accountId: accountId || null,
+    accountProfileConfigured: Boolean(profile),
   };
 }
 
@@ -202,6 +218,12 @@ function buildPreview() {
 }
 
 function clientFromSettings(settings) {
+  if (!settings.accountProfileConfigured && settings.accountId) {
+    throw new Error(`Für das Thunderbird-Konto ${settings.accountId} ist noch kein WebMail-Kontoprofil gespeichert. Bitte in den Add-on-Einstellungen dieses Konto auswählen und die passenden All-Inkl/SOGo-Zugangsdaten speichern.`);
+  }
+  if (!settings.sogoBaseUrl || !settings.sogoUsername) {
+    throw new Error('WebMail/SOGo Basis-URL und Login fehlen für das aktuelle Thunderbird-Konto.');
+  }
   const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
   return SogoClientApi.createClient({
     provider,
@@ -310,7 +332,8 @@ async function applyRuleToInbox(rule) {
 }
 
 async function applyRule() {
-  const settings = await getSettings();
+  if (!selectedMessageCache) await analyzeSelectedMail();
+  const settings = await getSettings(selectedMessageCache && selectedMessageCache.accountId);
   const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
   if (settings.dryRunOnly) throw new Error('Dry-run-only ist aktiv. Bitte in den Add-on-Einstellungen deaktivieren.');
   const rule = latestPreview || buildPreview();
@@ -357,14 +380,19 @@ async function applyRule() {
 }
 
 async function initialize() {
-  const settings = await getSettings();
+  await analyzeSelectedMail();
+  const settings = await getSettings(selectedMessageCache && selectedMessageCache.accountId);
   const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
   $('folder').value = settings.defaultFolder || 'INBOX/';
+  if (selectedMessageCache && selectedMessageCache.accountId && !settings.accountProfileConfigured) {
+    $('mode').textContent = `Für dieses Thunderbird-Konto (${selectedMessageCache.accountId}) ist noch kein WebMail-Kontoprofil gespeichert. Bitte in den Einstellungen ein Profil für genau dieses Konto anlegen.`;
+    $('apply').disabled = true;
+    return;
+  }
   $('mode').textContent = provider === 'allinkl'
-    ? (settings.dryRunOnly ? 'All-Inkl-Modus: Dry-run aktiv. Schreiben ist gesperrt.' : 'All-Inkl-Modus: Schreiben nach WebMail ist aktiv; optional kann die neue Regel auf die INBOX angewendet werden.')
-    : (settings.dryRunOnly ? 'Dry-run aktiv. Schreiben ist gesperrt.' : 'Schreiben nach SOGo ist nach Preview möglich.');
+    ? (settings.dryRunOnly ? 'All-Inkl-Modus: Dry-run aktiv. Schreiben ist gesperrt.' : `All-Inkl-Modus: Schreiben nach WebMail ist aktiv für Thunderbird-Konto ${settings.accountId || 'unbekannt'}.`)
+    : (settings.dryRunOnly ? 'Dry-run aktiv. Schreiben ist gesperrt.' : `Schreiben nach SOGo ist aktiv für Thunderbird-Konto ${settings.accountId || 'unbekannt'}.`);
   $('apply').disabled = settings.dryRunOnly;
-  await analyzeSelectedMail();
 }
 
 $('analyze').addEventListener('click', () => analyzeSelectedMail().catch(err => { $('output').textContent = String(err); }));

@@ -10,34 +10,55 @@
     <p>Diese Einstellungen werden lokal im Thunderbird-Profil gespeichert.</p>
 
     <form id="settings-form">
-      <label>
-        Webmail/SOGo Basis-URL
-        <input id="sogoBaseUrl" type="url" placeholder="https://webmail.all-inkl.com" required>
-      </label>
+      <section>
+        <h2>Thunderbird-Konto</h2>
+        <label>
+          Konto, für das diese WebMail-Zugangsdaten gelten
+          <select id="accountSelect"></select>
+        </label>
+        <p class="hint">
+          Wichtig: Die WebMail-Zugangsdaten werden pro Thunderbird-Konto gespeichert. Das Add-on wählt beim Speichern einer Regel automatisch das Profil des Kontos der ausgewählten Mail. Dadurch müssen Credentials nicht manuell gewechselt werden.
+        </p>
+      </section>
 
-      <label>
-        Benutzername
-        <input id="sogoUsername" type="text" placeholder="collector@kjkratz.de" autocomplete="username" required>
-      </label>
+      <section>
+        <h2>Serverseitige Filter dieses Kontos</h2>
+        <label>
+          WebMail/SOGo Basis-URL
+          <input id="sogoBaseUrl" type="url" placeholder="https://webmail.all-inkl.com" required>
+        </label>
 
-      <label>
-        Passwort / App-Passwort
-        <input id="sogoPassword" type="password" autocomplete="current-password">
-      </label>
+        <label>
+          WebMail-Login des Ziel-Postfachs
+          <input id="sogoUsername" type="text" placeholder="z. B. m0526a94 oder name@example.org" autocomplete="username" required>
+        </label>
 
-      <label>
-        Standard-Zielordner
-        <input id="defaultFolder" type="text" value="INBOX/">
-      </label>
+        <label>
+          Mail-/WebMail-Passwort dieses Postfachs
+          <input id="sogoPassword" type="password" autocomplete="current-password">
+        </label>
+        <p class="hint">
+          Diese Daten bestimmen, in welchem Postfach die serverseitige Filterregel angelegt wird. Für collector und kjk müssen daher getrennte Kontoprofile gespeichert werden.
+        </p>
+      </section>
 
-      <label class="checkbox-row">
-        <input id="dryRunOnly" type="checkbox" checked>
-        Nur Dry-run / Preview erlauben
-      </label>
+      <section>
+        <h2>Globale Add-on-Einstellungen</h2>
+        <label>
+          Standard-Zielordner
+          <input id="defaultFolder" type="text" value="INBOX/">
+        </label>
+
+        <label class="checkbox-row">
+          <input id="dryRunOnly" type="checkbox" checked>
+          Nur Dry-run / Preview erlauben
+        </label>
+      </section>
 
       <div class="button-row">
-        <button type="submit">Speichern</button>
+        <button type="submit">Für ausgewähltes Konto speichern</button>
         <button id="testConnection" type="button">Verbindung testen</button>
+        <button id="deleteAccountProfile" type="button">Kontoprofil löschen</button>
       </div>
     </form>
 

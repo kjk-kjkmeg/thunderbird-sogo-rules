@@ -18,7 +18,8 @@ label {
   margin: 12px 0;
 }
 
-input {
+input,
+select {
   box-sizing: border-box;
   display: block;
   width: 100%;
