@@ -10,6 +10,17 @@
     <p id="mode">Lädt Einstellungen…</p>
 
     <section>
+      <h2>Bestehende Regeln</h2>
+      <div class="button-row">
+        <button id="loadRules" type="button">Regeln laden</button>
+        <button id="saveExisting" type="button" disabled>Ausgewählte Regel aktualisieren</button>
+        <button id="deleteExisting" type="button" disabled>Ausgewählte Regel löschen</button>
+      </div>
+      <div id="rulesList" class="rules-list">Noch nicht geladen.</div>
+      <p class="hint">Laden/Anzeigen ist auch im Dry-run erlaubt. Aktualisieren und Löschen bleiben bei Dry-run gesperrt.</p>
+    </section>
+
+    <section>
       <h2>Ordnerprognose</h2>
       <div id="suggestions">Noch keine Mail analysiert.</div>
       <label>
@@ -30,6 +41,11 @@
     <label>
       Regelname
       <input id="ruleName" value="Thunderbird SOGo Rule">
+    </label>
+
+    <label class="checkbox-row">
+      <input id="ruleEnabled" type="checkbox" checked>
+      Regel aktiv
     </label>
 
     <label class="checkbox-row">

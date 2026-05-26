@@ -265,6 +265,72 @@
       return { deleted: ids.length, response };
     }
 
+    async deleteRule(rule) {
+      await this.ensureLoggedIn();
+      const ids = [];
+      if (rule && rule.id != null && rule.id !== '') ids.push(rule.id);
+      else throw new Error('All-Inkl-Regeln können nur mit eindeutiger ID gelöscht werden; Löschen per Name ist wegen Duplikaten gesperrt.');
+      if (!ids.length) return { ok: true, deleted: 0, response: null };
+      const pairs = ids.map(id => ['postData[pref-spam-filter][]', id]);
+      const response = await this.ajax('exec-pref-spam-delete', pairs);
+      if (!response || !response.result) throw new Error(`All-Inkl konnte Regel nicht löschen: ${JSON.stringify(response).slice(0, 300)}`);
+      return { ok: true, deleted: ids.length, response };
+    }
+
+    async updateRule(originalRule, updatedRule) {
+      await this.ensureLoggedIn();
+      if (!originalRule || originalRule.id == null || originalRule.id === '') {
+        throw new Error('All-Inkl-Regeln können nur mit eindeutiger ID aktualisiert werden; Aktualisieren per Name ist gesperrt.');
+      }
+      const hasEditableDetails = Boolean(
+        Array.isArray(originalRule.conditions) &&
+        originalRule.conditions.length &&
+        Array.isArray(originalRule.actions) &&
+        originalRule.actions.some(action => action && (action.method === 'fileinto' || action.action === 'move') && (action.argument || action.target))
+      );
+      if (!hasEditableDetails) {
+        throw new Error('All-Inkl-Regel enthält nur Übersichts-Daten ohne editierbare Kriterien/Aktionen; Aktualisierung wäre destruktiv und ist gesperrt.');
+      }
+      if (originalRule.active != null && updatedRule && updatedRule.active != null && Boolean(originalRule.active) !== Boolean(updatedRule.active)) {
+        throw new Error('All-Inkl-Aktivstatus kann über diese Schnittstelle nicht sicher aktualisiert werden.');
+      }
+      const originalName = originalRule.name || originalRule.title || '';
+      if ((updatedRule && updatedRule.name) === originalName) {
+        throw new Error('All-Inkl-Regeln können nicht sicher unter demselben Namen aktualisiert werden; bitte einen neuen eindeutigen Regelnamen wählen.');
+      }
+      const before = await this.readFilters();
+      const collidesWithOther = before.some(item =>
+        item &&
+        String(item.id) !== String(originalRule.id) &&
+        (item.name || item.title) === updatedRule.name
+      );
+      if (collidesWithOther) {
+        throw new Error('All-Inkl-Zielname existiert bereits bei einer anderen Regel; Aktualisierung wäre mehrdeutig und ist gesperrt.');
+      }
+      const response = await this.ajax('exec-pref-userfilter-save', this.ruleToPostData(updatedRule));
+      if (!response || !response.result) throw new Error(`All-Inkl konnte Regel nicht speichern: ${JSON.stringify(response).slice(0, 300)}`);
+      const afterSave = await this.readFilters();
+      const found = afterSave.find(item => item.name === updatedRule.name);
+      if (!found) throw new Error('All-Inkl-Readback konnte die aktualisierte Regel nicht finden.');
+      let deleted;
+      try {
+        deleted = await this.deleteRule(originalRule);
+      } catch (err) {
+        return {
+          ok: false,
+          cleanupNeeded: true,
+          ruleName: updatedRule.name,
+          previousCount: before.length,
+          newCount: afterSave.length,
+          response,
+          found,
+          error: err && err.message ? err.message : String(err),
+        };
+      }
+      const after = await this.readFilters();
+      return { ok: true, ruleName: updatedRule.name, previousCount: before.length, newCount: after.length, response, found, deleted };
+    }
+
     async writeRule(rule) {
       await this.ensureLoggedIn();
       const before = await this.readFilters();

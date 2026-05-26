@@ -1,5 +1,7 @@
 let selectedMessageCache = null;
 let latestPreview = null;
+let existingRuleCache = [];
+let selectedExistingRule = null;
 
 const SETTINGS_KEYS = ['accountProfiles', 'sogoBaseUrl', 'sogoUsername', 'sogoPassword', 'defaultFolder', 'dryRunOnly'];
 
@@ -187,6 +189,87 @@ function renderSuggestions(suggestions) {
   $('folder').value = suggestions[0].path;
 }
 
+function setRuleListButtons(settings) {
+  const hasSelection = Boolean(selectedExistingRule);
+  const provider = settings ? SogoClientApi.detectProvider(settings.sogoBaseUrl) : 'sogo';
+  const canUpdate = hasSelection && SogoRuleModel.isEditableRule(selectedExistingRule) && !(provider === 'allinkl' && (selectedExistingRule.id == null || selectedExistingRule.id === ''));
+  $('saveExisting').disabled = !canUpdate || (settings && settings.dryRunOnly);
+  $('deleteExisting').disabled = !hasSelection || (settings && settings.dryRunOnly);
+}
+
+function setEditorEnabled(enabled) {
+  for (const selector of ['#ruleName', '#folder', '#ruleEnabled', '.criterion-enabled', '.criterion-field', '.criterion-operator', '.criterion-value']) {
+    for (const element of document.querySelectorAll(selector)) element.disabled = !enabled;
+  }
+}
+
+function populateEditorFromRule(rule) {
+  $('ruleName').value = rule.name || rule.title || 'Thunderbird SOGo Rule';
+  $('ruleEnabled').checked = !(rule.active === false || rule.enabled === false);
+  const target = SogoRuleModel.getRuleTargetFolder(rule);
+  if (target) $('folder').value = target;
+  if (SogoRuleModel.isEditableRule(rule)) {
+    setCriteria(rule.conditions);
+    setEditorEnabled(true);
+    $('output').textContent = JSON.stringify({ selectedRule: SogoRuleModel.summarizeRule(rule), editable: true }, null, 2);
+  } else {
+    setCriteria([]);
+    setEditorEnabled(false);
+    $('output').textContent = JSON.stringify({
+      selectedRule: SogoRuleModel.summarizeRule(rule),
+      editable: false,
+      note: 'Diese Regel enthält nur Übersichts-Daten ohne lokal editierbare Kriterien/Aktionen. Aktualisieren ist gesperrt; Name/Ziel/Aktivstatus werden nicht aus der aktuellen Mail übernommen.',
+    }, null, 2);
+  }
+}
+
+async function selectExistingRule(index) {
+  selectedExistingRule = existingRuleCache[index] ? { ...existingRuleCache[index], __selectionIndex: index } : null;
+  for (const row of document.querySelectorAll('.rule-row')) row.classList.toggle('selected', row.dataset.index === String(index));
+  if (selectedExistingRule) populateEditorFromRule(selectedExistingRule);
+  const settings = await getSettings(selectedMessageCache && selectedMessageCache.accountId);
+  if (selectedExistingRule && SogoClientApi.detectProvider(settings.sogoBaseUrl) === 'allinkl') $('ruleEnabled').disabled = true;
+  setRuleListButtons(settings);
+}
+
+function renderExistingRules(rules) {
+  const container = $('rulesList');
+  container.textContent = '';
+  if (!rules.length) {
+    container.textContent = 'Keine Regeln gefunden.';
+    return;
+  }
+  rules.forEach((rule, index) => {
+    const summary = SogoRuleModel.summarizeRule(rule);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'rule-row';
+    button.dataset.index = String(index);
+    const title = document.createElement('strong');
+    title.textContent = `${summary.enabled ? '✓' : '○'} ${summary.name}`;
+    const criteria = document.createElement('span');
+    criteria.className = 'meta';
+    criteria.textContent = `Kriterien: ${summary.criteria}`;
+    const target = document.createElement('span');
+    target.className = 'meta';
+    target.textContent = `Ziel/Aktion: ${summary.target}${summary.editable ? '' : ' · nur eingeschränkt editierbar'}`;
+    button.append(title, criteria, target);
+    button.addEventListener('click', () => selectExistingRule(index).catch(err => { $('output').textContent = String(err); }));
+    container.appendChild(button);
+  });
+}
+
+async function loadExistingRules() {
+  $('rulesList').textContent = 'Lade Regeln…';
+  const settings = await getSettings(selectedMessageCache && selectedMessageCache.accountId);
+  const client = clientFromSettings(settings);
+  existingRuleCache = await client.readFilters();
+  selectedExistingRule = null;
+  renderExistingRules(existingRuleCache);
+  setRuleListButtons(settings);
+  $('output').textContent = JSON.stringify({ loadedRules: existingRuleCache.map(rule => SogoRuleModel.summarizeRule(rule)) }, null, 2);
+}
+
 async function analyzeSelectedMail() {
   $('output').textContent = 'Analysiere ausgewählte Mail…';
   const selected = await getSelectedMessage();
@@ -198,6 +281,7 @@ async function analyzeSelectedMail() {
   const folders = await listMailFolders();
   const suggestions = SogoFolderPredictor.suggestFoldersForMessage(folders, selectedMessageCache, 5);
   const criteria = SogoFolderPredictor.inferCriteriaFromMessage(selectedMessageCache);
+  setEditorEnabled(true);
   renderSuggestions(suggestions);
   setCriteria(criteria);
   const sender = SogoRuleModel.extractEmailAddress(selectedMessageCache.from);
@@ -210,11 +294,64 @@ function buildPreview() {
     name: $('ruleName').value,
     criteria: readCriteria(),
     folder: $('folder').value,
-    enabled: true,
+    enabled: $('ruleEnabled').checked,
   });
   latestPreview = rule;
   $('output').textContent = JSON.stringify({ dry_run: true, rule }, null, 2);
   return rule;
+}
+
+async function saveSelectedExistingRule() {
+  if (!selectedExistingRule) throw new Error('Keine bestehende Regel ausgewählt.');
+  const settings = await getSettings(selectedMessageCache && selectedMessageCache.accountId);
+  if (settings.dryRunOnly) throw new Error('Dry-run-only ist aktiv. Aktualisieren ist gesperrt.');
+  const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
+  const client = clientFromSettings(settings);
+  const updatedRule = buildPreview();
+  let result;
+  if (provider === 'allinkl' && typeof client.updateRule === 'function') {
+    if (!SogoRuleModel.isEditableRule(selectedExistingRule)) throw new Error('All-Inkl-Regel ist nur eingeschränkt editierbar; Aktualisieren ist gesperrt.');
+    if (selectedExistingRule.id == null || selectedExistingRule.id === '') throw new Error('All-Inkl-Regel hat keine eindeutige ID; Aktualisieren ist gesperrt.');
+    const existing = await client.readFilters();
+    await browser.storage.local.set({ lastAllInklFiltersBackup: { at: new Date().toISOString(), filters: existing } });
+    result = await client.updateRule(selectedExistingRule, updatedRule);
+  } else {
+    const existing = await client.readFilters();
+    const updated = SogoRuleModel.replaceExistingRule(existing, selectedExistingRule, updatedRule);
+    await browser.storage.local.set({ lastSogoSieveFiltersBackup: { at: new Date().toISOString(), filters: existing } });
+    await client.writeFilters(updated);
+    const readback = await client.readFilters();
+    if (SogoRuleModel.findRuleIndex(readback, updatedRule) < 0) throw new Error('SOGo-Readback konnte die aktualisierte Regel nicht finden.');
+    result = { ok: true, previousCount: existing.length, newCount: readback.length };
+  }
+  await loadExistingRules();
+  $('output').textContent = JSON.stringify({ updated: true, ruleName: updatedRule.name, provider, result }, null, 2);
+}
+
+async function deleteSelectedExistingRule() {
+  if (!selectedExistingRule) throw new Error('Keine bestehende Regel ausgewählt.');
+  const ruleName = selectedExistingRule.name || selectedExistingRule.title || '(ohne Name)';
+  if (!window.confirm(`Regel wirklich löschen?\n\n${ruleName}`)) return;
+  const settings = await getSettings(selectedMessageCache && selectedMessageCache.accountId);
+  if (settings.dryRunOnly) throw new Error('Dry-run-only ist aktiv. Löschen ist gesperrt.');
+  const provider = SogoClientApi.detectProvider(settings.sogoBaseUrl);
+  const client = clientFromSettings(settings);
+  let result;
+  if (provider === 'allinkl' && typeof client.deleteRule === 'function') {
+    const existing = await client.readFilters();
+    await browser.storage.local.set({ lastSogoSieveFiltersBackup: { at: new Date().toISOString(), filters: existing } });
+    result = await client.deleteRule(selectedExistingRule);
+  } else {
+    const existing = await client.readFilters();
+    const updated = SogoRuleModel.deleteExistingRule(existing, selectedExistingRule);
+    await browser.storage.local.set({ lastSogoSieveFiltersBackup: { at: new Date().toISOString(), filters: existing } });
+    await client.writeFilters(updated);
+    const readback = await client.readFilters();
+    if (SogoRuleModel.findRuleIndex(readback, selectedExistingRule) >= 0) throw new Error('SOGo-Readback zeigt die gelöschte Regel weiterhin an.');
+    result = { ok: true, previousCount: existing.length, newCount: readback.length };
+  }
+  await loadExistingRules();
+  $('output').textContent = JSON.stringify({ deleted: true, ruleName, provider, result }, null, 2);
 }
 
 function clientFromSettings(settings) {
@@ -399,5 +536,8 @@ $('analyze').addEventListener('click', () => analyzeSelectedMail().catch(err => 
 $('preview').addEventListener('click', () => { try { buildPreview(); } catch (err) { $('output').textContent = String(err); } });
 $('apply').addEventListener('click', () => applyRule().catch(err => { $('output').textContent = String(err); }));
 $('addCriterion').addEventListener('click', () => $('criteria').appendChild(criterionRow()));
+$('loadRules').addEventListener('click', () => loadExistingRules().catch(err => { $('output').textContent = String(err); $('rulesList').textContent = 'Laden fehlgeschlagen.'; }));
+$('saveExisting').addEventListener('click', () => saveSelectedExistingRule().catch(err => { $('output').textContent = String(err); }));
+$('deleteExisting').addEventListener('click', () => deleteSelectedExistingRule().catch(err => { $('output').textContent = String(err); }));
 
 initialize().catch(err => { $('output').textContent = String(err); });

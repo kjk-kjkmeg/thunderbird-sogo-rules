@@ -97,6 +97,103 @@
     return filters;
   }
 
+  function selectionIndex(rule) {
+    if (!rule) return null;
+    const value = rule.__selectionIndex != null ? rule.__selectionIndex : rule.selectionIndex;
+    if (value == null || value === '') return null;
+    const index = Number(value);
+    return Number.isInteger(index) && index >= 0 ? index : null;
+  }
+
+  function ruleIdentity(rule) {
+    if (!rule) return '';
+    if (rule.id != null && rule.id !== '') return `id:${rule.id}`;
+    return '';
+  }
+
+  function ruleDisplayName(rule) {
+    return rule && (rule.name || rule.title) || '';
+  }
+
+  function isEditableRule(rule) {
+    return Boolean(
+      rule &&
+      Array.isArray(rule.conditions) &&
+      rule.conditions.length &&
+      Array.isArray(rule.actions) &&
+      rule.actions.some(action => action && (action.method === 'fileinto' || action.action === 'move') && (action.argument || action.target))
+    );
+  }
+
+  function findRuleIndex(filters, selectedRule) {
+    const rows = Array.isArray(filters) ? filters : [];
+    const identity = ruleIdentity(selectedRule);
+    if (identity) {
+      const matches = rows.map((item, index) => ({ item, index })).filter(row => ruleIdentity(row.item) === identity);
+      if (matches.length === 1) return matches[0].index;
+      if (matches.length > 1) throw new Error('Ausgewählte Regel ist wegen mehrfacher ID nicht eindeutig.');
+      return -1;
+    }
+    const index = selectionIndex(selectedRule);
+    if (index != null) {
+      if (index >= rows.length) return -1;
+      const selectedName = ruleDisplayName(selectedRule);
+      const currentName = ruleDisplayName(rows[index]);
+      if (!selectedName || selectedName === currentName) return index;
+      throw new Error('Ausgewählte Regel stimmt nicht mehr mit der aktuellen Liste überein. Bitte neu laden.');
+    }
+    const name = ruleDisplayName(selectedRule);
+    if (name) {
+      const matches = rows.map((item, index) => ({ item, index })).filter(row => ruleDisplayName(row.item) === name);
+      if (matches.length === 1) return matches[0].index;
+      if (matches.length > 1) throw new Error('Regelname ist mehrfach vorhanden; Aktualisieren/Löschen wäre nicht eindeutig. Bitte neu laden und über die Listenauswahl arbeiten.');
+    }
+    return -1;
+  }
+
+  function replaceExistingRule(filters, selectedRule, updatedRule) {
+    const rows = Array.isArray(filters) ? filters.slice() : [];
+    const index = findRuleIndex(rows, selectedRule);
+    if (index < 0) throw new Error('Ausgewählte Regel wurde in der aktuellen Liste nicht gefunden.');
+    rows[index] = updatedRule;
+    return rows;
+  }
+
+  function deleteExistingRule(filters, selectedRule) {
+    const rows = Array.isArray(filters) ? filters.slice() : [];
+    const index = findRuleIndex(rows, selectedRule);
+    if (index < 0) throw new Error('Ausgewählte Regel wurde in der aktuellen Liste nicht gefunden.');
+    rows.splice(index, 1);
+    return rows;
+  }
+
+  function getRuleTargetFolder(rule) {
+    const action = (rule && rule.actions || []).find(item => item && (item.method === 'fileinto' || item.action === 'move'));
+    return action ? (action.argument || action.target || '') : '';
+  }
+
+  function summarizeCondition(condition) {
+    if (!condition) return '';
+    const fieldLabels = { from: 'Von', fromDomain: 'Von-Domain', to: 'An', cc: 'CC', subject: 'Betreff' };
+    const opLabels = { contains: 'enthält', is: 'ist', beginsWith: 'beginnt mit', endsWith: 'endet mit' };
+    if (condition.field) return `${fieldLabels[condition.field] || condition.field} ${opLabels[condition.operator] || condition.operator || 'enthält'} ${condition.value || ''}`.trim();
+    if (condition.header) return `${condition.header} ${condition.matchType || ''} ${condition.value || ''}`.trim();
+    return String(condition.value || condition.name || '').trim();
+  }
+
+  function summarizeRule(rule) {
+    const conditions = rule && (rule.conditions || rule.sieveConditions) || [];
+    const criterionSummary = conditions.length ? conditions.map(summarizeCondition).filter(Boolean).join((rule.match || 'all') === 'all' ? ' UND ' : ' ODER ') : 'Keine editierbaren Kriterien erkannt';
+    return {
+      id: ruleIdentity(rule) || (selectionIndex(rule) != null ? `index:${selectionIndex(rule)}` : ''),
+      name: (rule && (rule.name || rule.title)) || '(ohne Name)',
+      enabled: !(rule && (rule.active === false || rule.enabled === false)),
+      criteria: criterionSummary,
+      target: getRuleTargetFolder(rule) || '—',
+      editable: isEditableRule(rule),
+    };
+  }
+
   return {
     extractEmailAddress,
     normalizeRuleValue,
@@ -105,5 +202,15 @@
     conditionToSieve,
     buildSogoFilterRule,
     mergeRuleIntoExistingFilters,
+    selectionIndex,
+    ruleIdentity,
+    ruleDisplayName,
+    isEditableRule,
+    findRuleIndex,
+    replaceExistingRule,
+    deleteExistingRule,
+    getRuleTargetFolder,
+    summarizeCondition,
+    summarizeRule,
   };
 });

@@ -4,7 +4,7 @@ Thunderbird MailExtension for creating SOGo-visible mail filter rules from the c
 
 ## Status
 
-Version `0.2.8` is a direct-add-on build:
+Version `0.3.0` is a direct-add-on build:
 
 - stores SOGo connection settings in the Thunderbird add-on settings page
 - analyzes the currently selected message
@@ -17,6 +17,7 @@ Version `0.2.8` is a direct-add-on build:
 - stores a local backup of the previous filter list before writing
 - verifies writes with a readback check
 - can optionally create the target folder and apply the newly saved rule to existing INBOX messages
+- can list existing rules, safely select editable rules for update, and delete existing rules with explicit confirmation
 - self-update metadata is hosted via GitHub Pages
 
 ## Safety model
@@ -60,13 +61,13 @@ cp dist/updates.json public/updates.json
 The packaged extension is published at:
 
 ```text
-https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.8.xpi
+https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.3.0.xpi
 ```
 
 Local build path:
 
 ```text
-/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.2.8.xpi
+/home/morpheus/projects/thunderbird-sogo-rules/dist/sogo-rules-assistant-0.3.0.xpi
 ```
 
 Install it in Thunderbird:
