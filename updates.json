@@ -3,9 +3,9 @@
     "sogo-rules-assistant@kjkratz.local": {
       "updates": [
         {
-          "update_hash": "sha256:253abee48e3dd3a54b32a2bb534a493bc34f3efb6307b21d72a32fb3018d1227",
-          "update_link": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.2.9.xpi",
-          "version": "0.2.9"
+          "update_hash": "sha256:7182353dc3c580f9931cd42000cb26dfc0e37e40bb40587d01e6cbea6272324d",
+          "update_link": "https://kjk-kjkmeg.github.io/thunderbird-sogo-rules/releases/sogo-rules-assistant-0.3.0.xpi",
+          "version": "0.3.0"
         }
       ]
     }
